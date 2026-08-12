@@ -5,6 +5,32 @@ import TranslatePage from './pages/TranslatePage'
 import type { HealthResponse } from './types'
 
 type Tab = 'translate' | 'memory'
+type StatusLevel = 'ok' | 'warn' | 'down'
+
+function describeStatus(health: HealthResponse | null): { level: StatusLevel; label: string } {
+  if (!health) return { level: 'down', label: 'Проверка соединения…' }
+  if (!health.ollama_reachable) {
+    return { level: 'down', label: 'Ollama недоступна — запустите её локально' }
+  }
+
+  const missing = [
+    !health.chat_model_available && health.chat_model,
+    !health.embed_model_available && health.embed_model,
+  ].filter((model): model is string => Boolean(model))
+
+  if (missing.length > 0) {
+    const pullCommands = missing.map((model) => `ollama pull ${model}`).join('  /  ')
+    return {
+      level: 'warn',
+      label: `Ollama подключена, но не скачаны модели: ${missing.join(', ')} — выполните: ${pullCommands}`,
+    }
+  }
+
+  return {
+    level: 'ok',
+    label: `Ollama подключена · ${health.chat_model} · ${health.memory_count} записей в базе`,
+  }
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('translate')
@@ -25,11 +51,7 @@ export default function App() {
     }
   }, [])
 
-  const statusLabel = health
-    ? health.ollama_reachable
-      ? `Ollama подключена · ${health.chat_model} · ${health.memory_count} записей в базе`
-      : 'Ollama недоступна — запустите её локально'
-    : 'Проверка соединения…'
+  const { level, label } = describeStatus(health)
 
   return (
     <div className="app">
@@ -43,9 +65,9 @@ export default function App() {
             База переводов
           </button>
         </nav>
-        <div className={`status ${health?.ollama_reachable ? 'status-ok' : 'status-down'}`}>
+        <div className={`status status-${level}`}>
           <span className="status-dot" />
-          {statusLabel}
+          {label}
         </div>
       </header>
       <main className="app-main">{tab === 'translate' ? <TranslatePage /> : <MemoryPage />}</main>

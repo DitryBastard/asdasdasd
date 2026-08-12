@@ -40,6 +40,8 @@ export interface HealthResponse {
   ollama_reachable: boolean
   chat_model: string
   embed_model: string
+  chat_model_available: boolean
+  embed_model_available: boolean
   memory_count: number
 }
 

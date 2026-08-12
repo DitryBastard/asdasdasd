@@ -118,6 +118,10 @@ select {
   background: var(--color-ok);
 }
 
+.status-warn .status-dot {
+  background: var(--color-fuzzy-border);
+}
+
 .status-down .status-dot {
   background: var(--color-down);
 }

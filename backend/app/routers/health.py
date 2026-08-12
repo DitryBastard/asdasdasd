@@ -11,15 +11,22 @@ ollama = OllamaClient()
 
 @router.get("/health", response_model=HealthResponse)
 async def health():
+    ollama_reachable = False
+    chat_model_available = False
+    embed_model_available = False
     try:
-        await ollama.health()
+        available = await ollama.list_models()
         ollama_reachable = True
+        chat_model_available = settings.ollama_chat_model in available
+        embed_model_available = settings.ollama_embed_model in available
     except Exception:
-        ollama_reachable = False
+        pass
     return {
         "status": "ok",
         "ollama_reachable": ollama_reachable,
         "chat_model": settings.ollama_chat_model,
         "embed_model": settings.ollama_embed_model,
+        "chat_model_available": chat_model_available,
+        "embed_model_available": embed_model_available,
         "memory_count": vector_store.count(),
     }

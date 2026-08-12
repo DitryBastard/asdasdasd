@@ -73,4 +73,6 @@ class HealthResponse(BaseModel):
     ollama_reachable: bool
     chat_model: str
     embed_model: str
+    chat_model_available: bool
+    embed_model_available: bool
     memory_count: int
