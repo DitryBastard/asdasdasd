@@ -225,6 +225,97 @@ select {
   flex-wrap: wrap;
 }
 
+.output-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.save-to-memory {
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.save-message {
+  color: var(--color-ok);
+  font-size: 0.85rem;
+}
+
+.review-table {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.review-row-header {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.review-source {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 8px 2px;
+}
+
+.review-target-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-target {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 44px;
+}
+
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+.review-badge-exact {
+  background: var(--color-exact-bg);
+  color: var(--color-exact-text);
+}
+
+.review-badge-fuzzy {
+  background: var(--color-fuzzy-bg);
+  color: var(--color-fuzzy-text);
+}
+
+.review-badge-warning {
+  background: #fbe4e4;
+  color: var(--color-danger);
+}
+
 .output-placeholder {
   flex: 1;
   display: flex;
@@ -269,6 +360,26 @@ select {
 .segment.segment-active {
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
+}
+
+.segment.segment-warning {
+  cursor: pointer;
+  text-decoration: underline wavy var(--color-danger);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.qa-warning-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.qa-warning-row {
+  color: #ffb4b4;
 }
 
 .match-popover {
@@ -387,6 +498,10 @@ select {
   grid-template-columns: 1.3fr 1fr;
   gap: 16px;
   align-items: start;
+}
+
+.glossary-form-row {
+  max-width: 560px;
 }
 
 @media (max-width: 860px) {

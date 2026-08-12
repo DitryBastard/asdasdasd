@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { getHealth } from './api/client'
+import GlossaryPage from './pages/GlossaryPage'
 import MemoryPage from './pages/MemoryPage'
 import TranslatePage from './pages/TranslatePage'
 import type { HealthResponse } from './types'
 
-type Tab = 'translate' | 'memory'
+type Tab = 'translate' | 'memory' | 'glossary'
 type StatusLevel = 'ok' | 'warn' | 'down'
 
 function describeStatus(health: HealthResponse | null): { level: StatusLevel; label: string } {
@@ -64,13 +65,20 @@ export default function App() {
           <button className={tab === 'memory' ? 'tab active' : 'tab'} onClick={() => setTab('memory')}>
             База переводов
           </button>
+          <button className={tab === 'glossary' ? 'tab active' : 'tab'} onClick={() => setTab('glossary')}>
+            Термбаза
+          </button>
         </nav>
         <div className={`status status-${level}`}>
           <span className="status-dot" />
           {label}
         </div>
       </header>
-      <main className="app-main">{tab === 'translate' ? <TranslatePage /> : <MemoryPage />}</main>
+      <main className="app-main">
+        {tab === 'translate' && <TranslatePage />}
+        {tab === 'memory' && <MemoryPage />}
+        {tab === 'glossary' && <GlossaryPage />}
+      </main>
     </div>
   )
 }

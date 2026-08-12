@@ -96,6 +96,50 @@ async def fake_list_models_unreachable(self):
     raise OllamaError("boom: connection refused")
 
 
+def test_translate_includes_glossary_terms_in_prompt(monkeypatch):
+    monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+
+    captured_prompts: list[str] = []
+
+    async def capturing_chat(self, messages, model=None, temperature=0.2):
+        captured_prompts.append(messages[-1]["content"])
+        return await fake_chat(self, messages, model=model, temperature=temperature)
+
+    monkeypatch.setattr(OllamaClient, "chat", capturing_chat)
+
+    with TestClient(app) as client:
+        add_response = client.post(
+            "/api/glossary",
+            json={
+                "source_term": "control valve",
+                "target_term": "регулирующий клапан",
+                "source_lang": "en",
+                "target_lang": "ru",
+            },
+        )
+        assert add_response.status_code == 200
+        term_id = add_response.json()["id"]
+
+        list_response = client.get("/api/glossary", params={"source_lang": "en", "target_lang": "ru"})
+        assert list_response.status_code == 200
+        assert any(item["id"] == term_id for item in list_response.json()["items"])
+
+        translate_response = client.post(
+            "/api/translate",
+            json={
+                "text": "Inspect the control valve for wear.",
+                "source_lang": "en",
+                "target_lang": "ru",
+            },
+        )
+        assert translate_response.status_code == 200
+
+        delete_response = client.delete(f"/api/glossary/{term_id}")
+        assert delete_response.status_code == 200
+
+    assert any("control valve" in p and "регулирующий клапан" in p for p in captured_prompts)
+
+
 def test_translate_reuses_exact_memory_match(monkeypatch):
     monkeypatch.setattr(OllamaClient, "embed", fake_embed)
     monkeypatch.setattr(OllamaClient, "chat", fake_chat)
@@ -132,6 +176,51 @@ def test_translate_reuses_exact_memory_match(monkeypatch):
         fresh_segment = body["segments"][1]
         assert fresh_segment["match"] is None
         assert fresh_segment["translation"] == "[translated 1]"
+
+
+def test_memory_export_import_round_trip(monkeypatch):
+    monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+
+    with TestClient(app) as client:
+        add_response = client.post(
+            "/api/memory/entry",
+            json={
+                "source_text": "Экспорт в TMX работает.",
+                "target_text": "TMX export works.",
+                "source_lang": "ru",
+                "target_lang": "en",
+                "document_title": "export-test",
+            },
+        )
+        assert add_response.status_code == 200
+
+        export_response = client.get("/api/memory/export", params={"source_lang": "ru", "target_lang": "en"})
+        assert export_response.status_code == 200
+        assert export_response.headers["content-type"].startswith("application/xml")
+        assert "translation-memory.tmx" in export_response.headers["content-disposition"]
+        tmx_bytes = export_response.content
+        assert b"<tmx" in tmx_bytes
+        assert "Экспорт в TMX работает.".encode("utf-8") in tmx_bytes
+
+        import_response = client.post(
+            "/api/memory/import",
+            files={"file": ("backup.tmx", tmx_bytes, "application/xml")},
+            data={"source_lang": "ru", "target_lang": "en", "document_title": "reimported"},
+        )
+        assert import_response.status_code == 200
+        assert import_response.json()["added_segments"] >= 1
+
+
+def test_memory_import_rejects_malformed_tmx(monkeypatch):
+    monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/memory/import",
+            files={"file": ("bad.tmx", b"not xml at all", "application/xml")},
+            data={"source_lang": "ru", "target_lang": "en"},
+        )
+        assert response.status_code == 400
 
 
 def test_document_pair_preview_and_commit(monkeypatch):

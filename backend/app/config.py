@@ -12,6 +12,11 @@ class Settings(BaseSettings):
 
     chroma_persist_dir: str = "./data/chroma"
 
+    # Glossary (termbase) storage - a small hand-curated list of terms
+    # matched by exact substring, not vector search, so it lives in a plain
+    # JSON file rather than Chroma (see app/glossary_store.py).
+    glossary_path: str = "./data/glossary.json"
+
     # Cosine similarity thresholds that decide how a translation-memory match
     # is used: below fuzzy it is ignored, between fuzzy and exact it is passed
     # to the model as a reference, at/above exact the stored translation is

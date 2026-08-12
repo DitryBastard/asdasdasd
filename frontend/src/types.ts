@@ -13,6 +13,7 @@ export interface Segment {
   translation: string
   paragraph_index: number
   match: MatchInfo | null
+  warnings: string[]
 }
 
 export interface TranslateResponse {
@@ -53,4 +54,18 @@ export interface DocumentPair {
 export interface DocumentPairPreview {
   pairs: DocumentPair[]
   gap_count: number
+}
+
+export interface GlossaryEntry {
+  id: string
+  source_term: string
+  target_term: string
+  source_lang: string
+  target_lang: string
+  note: string
+  created_at: string
+}
+
+export interface GlossaryListResponse {
+  items: GlossaryEntry[]
 }

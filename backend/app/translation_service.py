@@ -1,7 +1,9 @@
 import re
 
+from . import glossary_store
 from .config import settings
 from .ollama_client import OllamaClient
+from .qa_checks import check_segment
 from .segmentation import split_paragraphs, split_sentences
 from .vector_store import vector_store
 
@@ -13,8 +15,9 @@ SYSTEM_PROMPT = (
     "code, file paths, or values in quotes exactly as they appear. When reference "
     "translations from a translation memory are provided, reuse their terminology "
     "and phrasing for consistency whenever it genuinely fits the sentence - ignore "
-    "a reference if it does not apply. Return only the requested translation(s), "
-    "with no explanations or extra commentary."
+    "a reference if it does not apply. Mandatory terminology, when provided, must "
+    "be used exactly as given, with no exceptions. Return only the requested "
+    "translation(s), with no explanations or extra commentary."
 )
 
 _NUMBERED_LINE = re.compile(r"^\s*(\d+)[.)]\s*(.*)$")
@@ -77,13 +80,33 @@ def _build_reference_block(references: list[dict]) -> str:
     )
 
 
-async def _translate_single(sentence: str, source_lang: str, target_lang: str) -> str:
+def _build_glossary_block(terms: list[dict]) -> str:
+    if not terms:
+        return ""
+    seen: set[tuple[str, str]] = set()
+    lines = []
+    for term in terms:
+        key = (term["source_term"], term["target_term"])
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(f'- "{term["source_term"]}" -> "{term["target_term"]}"')
+    if not lines:
+        return ""
+    return (
+        "Mandatory terminology - translate these terms exactly as given, "
+        "every time they appear, with no exceptions:\n" + "\n".join(lines) + "\n\n"
+    )
+
+
+async def _translate_single(sentence: str, glossary_terms: list[dict], source_lang: str, target_lang: str) -> str:
     content = await ollama.chat(
         [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": (
+                    f"{_build_glossary_block(glossary_terms)}"
                     f"Translate this sentence from {source_lang} to {target_lang}. "
                     f"Return only the translation, nothing else.\n\n{sentence}"
                 ),
@@ -96,16 +119,26 @@ async def _translate_single(sentence: str, source_lang: str, target_lang: str) -
 async def _translate_batch(
     sentences: list[str],
     references: list[dict],
+    glossary_entries: list[dict],
     source_lang: str,
     target_lang: str,
 ) -> list[str]:
     if not sentences:
         return []
 
+    applicable_terms: list[dict] = []
+    seen_term_ids: set[str] = set()
+    for sentence in sentences:
+        for term in glossary_store.find_applicable_terms(sentence, glossary_entries):
+            if term["id"] not in seen_term_ids:
+                seen_term_ids.add(term["id"])
+                applicable_terms.append(term)
+
     numbered = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(sentences))
     user_prompt = (
         f"Translate the following numbered sentences from {source_lang} to {target_lang}. "
         "This is technical documentation.\n\n"
+        f"{_build_glossary_block(applicable_terms)}"
         f"{_build_reference_block(references)}"
         "Sentences:\n"
         f"{numbered}\n\n"
@@ -126,7 +159,10 @@ async def _translate_batch(
     # The model didn't follow the numbered format (rare, but local models
     # vary in instruction-following). Fall back to one call per sentence so a
     # single malformed batch can't lose the rest of the document.
-    return [await _translate_single(s, source_lang, target_lang) for s in sentences]
+    return [
+        await _translate_single(s, glossary_store.find_applicable_terms(s, glossary_entries), source_lang, target_lang)
+        for s in sentences
+    ]
 
 
 async def translate_text(text: str, source_lang: str, target_lang: str) -> dict:
@@ -138,6 +174,8 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> dict:
     ]
     if not flat:
         return {"translated_text": "", "segments": []}
+
+    glossary_entries = glossary_store.list_entries(source_lang, target_lang)
 
     sentences = [sentence for _, sentence in flat]
     embeddings = await ollama.embed(sentences)
@@ -158,20 +196,22 @@ async def translate_text(text: str, source_lang: str, target_lang: str) -> dict:
         batch_indices = pending_indices[start : start + settings.batch_size]
         batch_sentences = [sentences[i] for i in batch_indices]
         batch_refs = [matches[i] for i in batch_indices if matches[i]]
-        results = await _translate_batch(batch_sentences, batch_refs, source_lang, target_lang)
+        results = await _translate_batch(batch_sentences, batch_refs, glossary_entries, source_lang, target_lang)
         for i, translation in zip(batch_indices, results):
             translations[i] = translation
 
     paragraph_groups: dict[int, list[str]] = {}
     segments = []
     for (p_idx, sentence), match, translation in zip(flat, matches, translations):
-        paragraph_groups.setdefault(p_idx, []).append(translation or "")
+        translation = translation or ""
+        paragraph_groups.setdefault(p_idx, []).append(translation)
         segments.append(
             {
                 "source": sentence,
-                "translation": translation or "",
+                "translation": translation,
                 "paragraph_index": p_idx,
                 "match": match,
+                "warnings": check_segment(sentence, translation),
             }
         )
 

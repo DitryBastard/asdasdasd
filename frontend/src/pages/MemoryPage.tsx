@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ManualEntryForm from '../components/ManualEntryForm'
+import MemoryImportExport from '../components/MemoryImportExport'
 import MemoryList from '../components/MemoryList'
 import MemoryUpload from '../components/MemoryUpload'
 
@@ -13,6 +14,7 @@ export default function MemoryPage() {
         <MemoryUpload onCommitted={bump} />
         <ManualEntryForm onAdded={bump} />
       </div>
+      <MemoryImportExport onImported={bump} />
       <MemoryList refreshKey={refreshKey} />
     </div>
   )

@@ -99,10 +99,14 @@ class VectorStore:
         limit: int,
         offset: int,
     ) -> list[dict]:
+        items = self.list_all(source_lang, target_lang)
+        return items[offset : offset + limit]
+
+    def list_all(self, source_lang: str | None = None, target_lang: str | None = None) -> list[dict]:
         result = self._collection.get(where=self._where_for(source_lang, target_lang))
         items = [{"id": item_id, **result["metadatas"][i]} for i, item_id in enumerate(result["ids"])]
         items.sort(key=lambda item: item.get("created_at", ""), reverse=True)
-        return items[offset : offset + limit]
+        return items
 
     def count(self, source_lang: str | None = None, target_lang: str | None = None) -> int:
         where = self._where_for(source_lang, target_lang)

@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .ollama_client import OllamaError
-from .routers import health, memory, translate
+from .routers import glossary, health, memory, translate
 
 app = FastAPI(title="AI Translator", version="0.1.0")
 
@@ -25,3 +25,4 @@ async def ollama_error_handler(request: Request, exc: OllamaError) -> JSONRespon
 app.include_router(health.router)
 app.include_router(translate.router)
 app.include_router(memory.router)
+app.include_router(glossary.router)

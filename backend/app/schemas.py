@@ -20,6 +20,7 @@ class SegmentOut(BaseModel):
     translation: str
     paragraph_index: int
     match: MatchInfo | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class TranslateResponse(BaseModel):
@@ -75,3 +76,25 @@ class HealthResponse(BaseModel):
     chat_model_available: bool
     embed_model_available: bool
     memory_count: int
+
+
+class GlossaryEntryOut(BaseModel):
+    id: str
+    source_term: str
+    target_term: str
+    source_lang: str
+    target_lang: str
+    note: str
+    created_at: str
+
+
+class GlossaryListResponse(BaseModel):
+    items: list[GlossaryEntryOut]
+
+
+class GlossaryEntryIn(BaseModel):
+    source_term: str
+    target_term: str
+    source_lang: str = Field(min_length=2, max_length=10)
+    target_lang: str = Field(min_length=2, max_length=10)
+    note: str = ""

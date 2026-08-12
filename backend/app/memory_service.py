@@ -5,6 +5,7 @@ from .document_parser import Table
 from .llm_alignment import align_documents_with_llm
 from .ollama_client import OllamaClient
 from .segmentation import split_sentences
+from .tmx import build_tmx, parse_tmx
 from .vector_store import vector_store
 
 ollama = OllamaClient()
@@ -134,3 +135,12 @@ async def search_memory(
 
 def delete_memory(item_id: str) -> None:
     vector_store.delete(item_id)
+
+
+def export_memory_tmx(source_lang: str | None, target_lang: str | None) -> bytes:
+    return build_tmx(vector_store.list_all(source_lang, target_lang))
+
+
+async def import_memory_tmx(data: bytes, source_lang: str, target_lang: str, document_title: str) -> int:
+    pairs = parse_tmx(data, source_lang, target_lang)
+    return await ingest_pairs(pairs, source_lang, target_lang, document_title)

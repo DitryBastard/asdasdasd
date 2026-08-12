@@ -29,31 +29,46 @@ export default function SegmentedOutput({ segments }: { segments: Segment[] }) {
           {paragraph.map((seg) => {
             globalIndex += 1
             const idx = globalIndex
+            const hasWarnings = seg.warnings.length > 0
+            const isClickable = Boolean(seg.match) || hasWarnings
             const matchClass = seg.match ? `match-${seg.match.type}` : ''
             const isActive = activeIndex === idx
             return (
               <span key={idx} className="segment-wrap">
                 <span
-                  className={`segment ${matchClass} ${isActive ? 'segment-active' : ''}`.trim()}
-                  onClick={() => seg.match && setActiveIndex(isActive ? null : idx)}
+                  className={`segment ${matchClass} ${hasWarnings ? 'segment-warning' : ''} ${isActive ? 'segment-active' : ''}`.trim()}
+                  onClick={() => isClickable && setActiveIndex(isActive ? null : idx)}
                 >
                   {seg.translation || seg.source}
                 </span>{' '}
-                {isActive && seg.match && (
+                {isActive && (seg.match || hasWarnings) && (
                   <span className="match-popover">
-                    <strong className="match-popover-title">
-                      {seg.match.type === 'exact' ? 'Точное совпадение из базы' : 'Похоже на запись из базы'}
-                      {' · '}
-                      {Math.round(seg.match.similarity * 100)}%
-                    </strong>
-                    <span className="match-popover-row">
-                      <span className="match-label">Оригинал в базе:</span> {seg.match.memory_source}
-                    </span>
-                    <span className="match-popover-row">
-                      <span className="match-label">Перевод в базе:</span> {seg.match.memory_target}
-                    </span>
-                    {seg.match.document_title && (
-                      <span className="match-popover-row match-source-doc">Источник: {seg.match.document_title}</span>
+                    {hasWarnings && (
+                      <span className="qa-warning-block">
+                        {seg.warnings.map((warning) => (
+                          <span className="qa-warning-row" key={warning}>
+                            ⚠ {warning}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                    {seg.match && (
+                      <>
+                        <strong className="match-popover-title">
+                          {seg.match.type === 'exact' ? 'Точное совпадение из базы' : 'Похоже на запись из базы'}
+                          {' · '}
+                          {Math.round(seg.match.similarity * 100)}%
+                        </strong>
+                        <span className="match-popover-row">
+                          <span className="match-label">Оригинал в базе:</span> {seg.match.memory_source}
+                        </span>
+                        <span className="match-popover-row">
+                          <span className="match-label">Перевод в базе:</span> {seg.match.memory_target}
+                        </span>
+                        {seg.match.document_title && (
+                          <span className="match-popover-row match-source-doc">Источник: {seg.match.document_title}</span>
+                        )}
+                      </>
                     )}
                   </span>
                 )}

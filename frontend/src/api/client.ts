@@ -1,6 +1,8 @@
 import type {
   DocumentPair,
   DocumentPairPreview,
+  GlossaryEntry,
+  GlossaryListResponse,
   HealthResponse,
   MemoryListResponse,
   TranslateResponse,
@@ -120,6 +122,65 @@ export function previewDocumentPair(
   form.append('source_lang', sourceLang)
   form.append('target_lang', targetLang)
   return request('/api/memory/documents/preview', { method: 'POST', body: form })
+}
+
+export async function exportMemoryTmx(sourceLang?: string, targetLang?: string): Promise<Blob> {
+  const search = new URLSearchParams()
+  if (sourceLang) search.set('source_lang', sourceLang)
+  if (targetLang) search.set('target_lang', targetLang)
+  const query = search.toString()
+  const res = await fetch(`/api/memory/export${query ? `?${query}` : ''}`)
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      detail = body.detail ?? detail
+    } catch {
+      // response had no JSON body; fall back to statusText
+    }
+    throw new Error(detail)
+  }
+  return res.blob()
+}
+
+export function importMemoryTmx(
+  file: File,
+  sourceLang: string,
+  targetLang: string,
+  documentTitle: string,
+): Promise<{ added_segments: number }> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('source_lang', sourceLang)
+  form.append('target_lang', targetLang)
+  form.append('document_title', documentTitle)
+  return request('/api/memory/import', { method: 'POST', body: form })
+}
+
+export function listGlossary(sourceLang?: string, targetLang?: string): Promise<GlossaryListResponse> {
+  const search = new URLSearchParams()
+  if (sourceLang) search.set('source_lang', sourceLang)
+  if (targetLang) search.set('target_lang', targetLang)
+  const query = search.toString()
+  return request(`/api/glossary${query ? `?${query}` : ''}`)
+}
+
+export function addGlossaryEntry(entry: {
+  source_term: string
+  target_term: string
+  source_lang: string
+  target_lang: string
+  note?: string
+}): Promise<GlossaryEntry> {
+  return request('/api/glossary', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  })
+}
+
+export function deleteGlossaryEntry(id: string): Promise<{ status: string }> {
+  return request(`/api/glossary/${id}`, { method: 'DELETE' })
 }
 
 export function commitDocumentPairs(

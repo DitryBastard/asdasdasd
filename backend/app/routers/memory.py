@@ -1,4 +1,5 @@
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 
 from .. import memory_service
 from ..document_parser import extract_structure
@@ -72,6 +73,31 @@ async def commit_document_pairs(req: CommitDocumentPairsRequest):
         req.target_lang,
         req.document_title,
     )
+    return {"added_segments": count}
+
+
+@router.get("/export")
+async def export_memory(source_lang: str | None = None, target_lang: str | None = None):
+    data = memory_service.export_memory_tmx(source_lang, target_lang)
+    return Response(
+        content=data,
+        media_type="application/xml",
+        headers={"Content-Disposition": 'attachment; filename="translation-memory.tmx"'},
+    )
+
+
+@router.post("/import")
+async def import_memory(
+    file: UploadFile = File(...),
+    source_lang: str = Form(...),
+    target_lang: str = Form(...),
+    document_title: str = Form("Imported TMX"),
+):
+    data = await file.read()
+    try:
+        count = await memory_service.import_memory_tmx(data, source_lang, target_lang, document_title)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return {"added_segments": count}
 
 
