@@ -25,12 +25,11 @@ def _build_sample_docx() -> bytes:
 
 
 def _build_sample_pdf() -> bytes:
-    # Intro and closing text live on separate pages (rather than the same
-    # page with just a Spacer between them) because pdfplumber's basic text
-    # extraction doesn't reliably turn a visual gap into a blank line in the
-    # extracted text - relying on that would make this test flaky. Page
-    # boundaries, by contrast, always keep text apart: each page is
-    # extracted and paragraph-split independently.
+    # Intro and closing text live on separate pages purely so this fixture
+    # produces two distinguishable page_texts entries to exercise the
+    # page-join behavior; extract_structure_pdf no longer tries to guess
+    # paragraph boundaries within that text (see app/llm_alignment.py for
+    # why - the model does that job now).
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
@@ -47,10 +46,10 @@ def _build_sample_pdf() -> bytes:
     return buffer.getvalue()
 
 
-def test_extract_structure_docx_keeps_table_separate_from_paragraphs():
-    paragraphs, tables = extract_structure_docx(_build_sample_docx())
+def test_extract_structure_docx_keeps_table_separate_from_text():
+    text, tables = extract_structure_docx(_build_sample_docx())
 
-    assert paragraphs == ["Intro paragraph about the material.", "Closing paragraph after the table."]
+    assert text == "Intro paragraph about the material.\n\nClosing paragraph after the table."
     assert tables == [[["Fe", "Ti", "Mo"], ["178.29", "0.5", "I"]]]
 
 
@@ -60,30 +59,31 @@ def test_extract_structure_docx_rejects_malformed_file():
 
 
 def test_extract_structure_pdf_detects_table_and_prose_separately():
-    paragraphs, tables = extract_structure_pdf(_build_sample_pdf())
+    text, tables = extract_structure_pdf(_build_sample_pdf())
 
-    assert any("Intro paragraph" in p for p in paragraphs)
-    assert any("Closing paragraph" in p for p in paragraphs)
+    assert "Intro paragraph" in text
+    assert "Closing paragraph" in text
     # The table's own cell values must not also leak into the prose stream -
-    # otherwise cells get translated/aligned twice, once as loose fragments
-    # and once as structured table data.
-    assert not any("Fe" in p and "Ti" in p for p in paragraphs)
+    # otherwise cells get aligned/stored twice, once as loose text and once
+    # as structured table data.
+    assert "Fe" not in text and "Ti" not in text
     assert len(tables) == 1
     assert tables[0][0] == ["Fe", "Ti", "Mo"]
     assert tables[0][1] == ["178.29", "0.5", "I"]
 
 
 def test_extract_structure_dispatches_by_extension():
-    docx_paragraphs, docx_tables = extract_structure("original.docx", _build_sample_docx())
-    pdf_paragraphs, pdf_tables = extract_structure("original.pdf", _build_sample_pdf())
+    docx_text, docx_tables = extract_structure("original.docx", _build_sample_docx())
+    pdf_text, pdf_tables = extract_structure("original.pdf", _build_sample_pdf())
 
     assert docx_tables and pdf_tables
-    assert docx_paragraphs[0] == pdf_paragraphs[0] == "Intro paragraph about the material."
+    assert "Intro paragraph about the material." in docx_text
+    assert "Intro paragraph about the material." in pdf_text
 
 
 def test_extract_structure_txt_has_no_tables():
-    paragraphs, tables = extract_structure("notes.txt", "First.\n\nSecond.".encode("utf-8"))
-    assert paragraphs == ["First.", "Second."]
+    text, tables = extract_structure("notes.txt", "First.\n\nSecond.".encode("utf-8"))
+    assert text == "First.\n\nSecond."
     assert tables == []
 
 

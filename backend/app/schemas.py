@@ -52,8 +52,7 @@ class ManualMemoryEntry(BaseModel):
 
 class DocumentPairPreviewResponse(BaseModel):
     pairs: list[dict[str, str]]
-    source_paragraph_count: int
-    target_paragraph_count: int
+    gap_count: int
 
 
 class DocumentPair(BaseModel):

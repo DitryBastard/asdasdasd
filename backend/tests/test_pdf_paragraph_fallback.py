@@ -2,7 +2,10 @@
 real ISO/ASTM-style standard: a page of densely-set text with no blank-line
 paragraph breaks used to fall back to one paragraph per physical (wrapped)
 line, shredding a handful of real paragraphs into hundreds of fragments and
-wrecking both the memory-alignment preview and match quality.
+wrecking translation quality on the /api/translate/document(/formatted)
+endpoints, which still use extract_paragraphs_pdf's paragraph list. (The
+memory-alignment preview no longer pre-splits into paragraphs at all - see
+app/llm_alignment.py - so this fallback logic doesn't apply there anymore.)
 """
 
 import io
@@ -10,7 +13,7 @@ import io
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate
 
-from app.document_parser import extract_paragraphs_pdf, extract_structure_pdf
+from app.document_parser import extract_paragraphs_pdf
 
 
 def _build_dense_pdf() -> bytes:
@@ -28,16 +31,6 @@ def _build_dense_pdf() -> bytes:
 def test_extract_paragraphs_pdf_does_not_shred_dense_text_line_by_line():
     paragraphs = extract_paragraphs_pdf(_build_dense_pdf())
 
-    assert len(paragraphs) <= 2
-    combined = " ".join(paragraphs)
-    assert "Sentence number 1 about" in combined
-    assert "Sentence number 39 about" in combined
-
-
-def test_extract_structure_pdf_does_not_shred_dense_text_line_by_line():
-    paragraphs, tables = extract_structure_pdf(_build_dense_pdf())
-
-    assert tables == []
     assert len(paragraphs) <= 2
     combined = " ".join(paragraphs)
     assert "Sentence number 1 about" in combined

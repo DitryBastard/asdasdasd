@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
 from .. import memory_service
 from ..document_parser import extract_structure
@@ -43,19 +43,23 @@ async def add_manual_entry(entry: ManualMemoryEntry):
 async def preview_document_pair(
     source_file: UploadFile = File(...),
     target_file: UploadFile = File(...),
+    source_lang: str = Form(...),
+    target_lang: str = Form(...),
 ):
     source_data = await source_file.read()
     target_data = await target_file.read()
     try:
-        source_paragraphs, source_tables = extract_structure(source_file.filename or "source.txt", source_data)
-        target_paragraphs, target_tables = extract_structure(target_file.filename or "target.txt", target_data)
+        source_text, source_tables = extract_structure(source_file.filename or "source.txt", source_data)
+        target_text, target_tables = extract_structure(target_file.filename or "target.txt", target_data)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if not source_paragraphs and not source_tables:
+    if not source_text.strip() and not source_tables:
         raise HTTPException(400, "Could not extract text from the source document")
-    if not target_paragraphs and not target_tables:
+    if not target_text.strip() and not target_tables:
         raise HTTPException(400, "Could not extract text from the target document")
-    return await memory_service.preview_document_pair(source_paragraphs, source_tables, target_paragraphs, target_tables)
+    return await memory_service.preview_document_pair(
+        source_text, source_tables, target_text, target_tables, source_lang, target_lang
+    )
 
 
 @router.post("/documents/commit")

@@ -23,14 +23,14 @@ class Settings(BaseSettings):
     # How many sentences are sent to the model in a single translation request.
     batch_size: int = 20
 
-    # Paragraph-alignment costs (see app/alignment.py). Higher gap_penalty
-    # makes the aligner more reluctant to leave a paragraph unmatched;
-    # higher merge_penalty makes it more reluctant to merge two paragraphs
-    # on one side into one on the other. These are reasonable starting
-    # points, not empirically tuned against real bge-m3 output - adjust if
-    # real documents show the aligner being too eager/reluctant to skip.
-    alignment_gap_penalty: float = 0.15
-    alignment_merge_penalty: float = 0.03
+    # Max characters of document text sent to the chat model in a single
+    # alignment call (see app/llm_alignment.py) - the model segments *and*
+    # aligns a source/translation document pair in one step, rather than
+    # pre-splitting into paragraphs with brittle heuristics first. Larger
+    # means fewer chunks (better alignment quality, since the model sees
+    # more context at once) at the cost of a longer prompt; this is sized
+    # to comfortably fit an 8k+ context window with room for the response.
+    llm_alignment_max_chars: int = 12000
 
     # Max horizontal gap (PDF points) between two characters before
     # pdfplumber treats them as separate words when extracting PDF text.

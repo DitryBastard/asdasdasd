@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
-from .alignment import align_paragraphs, align_tables
-from .config import settings
+from .alignment import align_tables
 from .document_parser import Table
+from .llm_alignment import align_documents_with_llm
 from .ollama_client import OllamaClient
 from .segmentation import split_sentences
 from .vector_store import vector_store
@@ -11,40 +11,31 @@ ollama = OllamaClient()
 
 
 async def preview_document_pair(
-    source_paragraphs: list[str],
+    source_text: str,
     source_tables: list[Table],
-    target_paragraphs: list[str],
+    target_text: str,
     target_tables: list[Table],
+    source_lang: str,
+    target_lang: str,
 ) -> dict:
     """Align a source document with its translation before anything is
     committed to the translation memory.
 
-    Body paragraphs are aligned by embedding similarity (app/alignment.
-    align_paragraphs) rather than assuming paragraph N matches paragraph N -
-    that positional assumption breaks as soon as one paragraph is added,
-    dropped, or split/merged during translation. Table cells are matched
+    Body text is segmented and aligned by the chat model in one step
+    (app/llm_alignment.py) - real documents mix flowing prose, short
+    list-like entries, and headings, and no rule-based paragraph-splitting
+    heuristic told those apart consistently enough for a downstream
+    similarity-based aligner to work with. Table cells are matched
     positionally instead (app/alignment.align_tables): a bare cell value
     (an element symbol, a lone number) has too little semantic content for
-    similarity search to place reliably, whereas a table's row/column
-    structure reliably survives translation. The caller still reviews and
-    can edit every pair before it is committed.
+    the model or similarity search to place reliably, whereas a table's
+    row/column structure reliably survives translation. The caller still
+    reviews and can edit every pair before it is committed.
     """
-    source_embeddings = await ollama.embed(source_paragraphs)
-    target_embeddings = await ollama.embed(target_paragraphs)
-    pairs = align_paragraphs(
-        source_paragraphs,
-        source_embeddings,
-        target_paragraphs,
-        target_embeddings,
-        gap_penalty=settings.alignment_gap_penalty,
-        merge_penalty=settings.alignment_merge_penalty,
-    )
+    pairs = await align_documents_with_llm(source_text, target_text, source_lang, target_lang)
     pairs.extend(align_tables(source_tables, target_tables))
-    return {
-        "pairs": pairs,
-        "source_paragraph_count": len(source_paragraphs) + sum(len(t) for t in source_tables),
-        "target_paragraph_count": len(target_paragraphs) + sum(len(t) for t in target_tables),
-    }
+    gap_count = sum(1 for pair in pairs if not pair["source_text"].strip() or not pair["target_text"].strip())
+    return {"pairs": pairs, "gap_count": gap_count}
 
 
 async def ingest_pairs(

@@ -52,6 +52,5 @@ export interface DocumentPair {
 
 export interface DocumentPairPreview {
   pairs: DocumentPair[]
-  source_paragraph_count: number
-  target_paragraph_count: number
+  gap_count: number
 }

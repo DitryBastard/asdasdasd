@@ -108,10 +108,17 @@ export function deleteMemoryEntry(id: string): Promise<{ status: string }> {
   return request(`/api/memory/${id}`, { method: 'DELETE' })
 }
 
-export function previewDocumentPair(sourceFile: File, targetFile: File): Promise<DocumentPairPreview> {
+export function previewDocumentPair(
+  sourceFile: File,
+  targetFile: File,
+  sourceLang: string,
+  targetLang: string,
+): Promise<DocumentPairPreview> {
   const form = new FormData()
   form.append('source_file', sourceFile)
   form.append('target_file', targetFile)
+  form.append('source_lang', sourceLang)
+  form.append('target_lang', targetLang)
   return request('/api/memory/documents/preview', { method: 'POST', body: form })
 }
 

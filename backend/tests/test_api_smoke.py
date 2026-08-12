@@ -8,6 +8,7 @@ the pure-function unit tests elsewhere don't touch.
 """
 
 import io
+import json
 import re
 
 from docx import Document
@@ -50,8 +51,30 @@ async def fake_embed(self, texts, model=None):
     return [_one_hot(t) for t in texts]
 
 
+def _fake_alignment_response(user_content: str) -> str:
+    # Mirrors app.llm_alignment._build_alignment_prompt's format. Test
+    # fixtures always put source/target units in matching order, so pairing
+    # them positionally here is a faithful stand-in for what a real model
+    # would return for well-aligned input.
+    source_block = user_content.split("=== SOURCE ===\n", 1)[1].split("\n\n=== TRANSLATION ===")[0]
+    target_block = user_content.split("=== TRANSLATION ===\n", 1)[1].rsplit("\n\nOutput the JSON array now.", 1)[0]
+    source_units = [u for u in source_block.split("\n\n") if u.strip()]
+    target_units = [u for u in target_block.split("\n\n") if u.strip()]
+    pairs = []
+    for i in range(max(len(source_units), len(target_units))):
+        pairs.append(
+            {
+                "source": source_units[i] if i < len(source_units) else "",
+                "target": target_units[i] if i < len(target_units) else "",
+            }
+        )
+    return json.dumps(pairs)
+
+
 async def fake_chat(self, messages, model=None, temperature=0.2):
     user_content = messages[-1]["content"]
+    if "=== SOURCE ===" in user_content:
+        return _fake_alignment_response(user_content)
     count = len(re.findall(r"^\d+\.", user_content, re.MULTILINE))
     return "\n".join(f"{i + 1}. [translated {i + 1}]" for i in range(count))
 
@@ -113,6 +136,7 @@ def test_translate_reuses_exact_memory_match(monkeypatch):
 
 def test_document_pair_preview_and_commit(monkeypatch):
     monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+    monkeypatch.setattr(OllamaClient, "chat", fake_chat)
 
     with TestClient(app) as client:
         preview_response = client.post(
@@ -121,16 +145,18 @@ def test_document_pair_preview_and_commit(monkeypatch):
                 "source_file": ("source.txt", "Первый абзац.\n\nВторой абзац.", "text/plain"),
                 "target_file": ("target.txt", "First paragraph.\n\nSecond paragraph.", "text/plain"),
             },
+            data={"source_lang": "ru", "target_lang": "en"},
         )
         assert preview_response.status_code == 200
         preview = preview_response.json()
-        # Real assertion on content, not just count: proves the embedding-based
-        # aligner (app/alignment.py) actually paired each source paragraph with
-        # its matching translation rather than just zipping by position.
+        # Real assertion on content, not just count: proves the LLM-based
+        # aligner (app/llm_alignment.py) actually paired each source segment
+        # with its matching translation, not just zipped by position.
         assert preview["pairs"] == [
             {"source_text": "Первый абзац.", "target_text": "First paragraph."},
             {"source_text": "Второй абзац.", "target_text": "Second paragraph."},
         ]
+        assert preview["gap_count"] == 0
 
         commit_response = client.post(
             "/api/memory/documents/commit",
@@ -162,9 +188,9 @@ def test_document_pair_preview_matches_table_cells_positionally_not_semantically
     # bare cell values (element symbols, numbers) carry too little semantic
     # signal for embedding similarity, but table structure is preserved
     # between original and translation - so this must come out matched
-    # correctly even though every cell maps to the *same* fallback vector
-    # under fake_embed (nothing here is in _KNOWN_SENTENCES).
+    # correctly regardless of what the LLM aligner does with the body text.
     monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+    monkeypatch.setattr(OllamaClient, "chat", fake_chat)
 
     source_bytes = _docx_bytes(
         paragraph="Заголовок документа.",
@@ -182,6 +208,7 @@ def test_document_pair_preview_matches_table_cells_positionally_not_semantically
                 "source_file": ("source.docx", source_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
                 "target_file": ("target.docx", target_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             },
+            data={"source_lang": "ru", "target_lang": "en"},
         )
 
     assert response.status_code == 200

@@ -18,7 +18,7 @@ export default function MemoryUpload({ onCommitted }: { onCommitted: () => void 
     setLoading(true)
     setError(null)
     try {
-      const res = await previewDocumentPair(sourceFile, targetFile)
+      const res = await previewDocumentPair(sourceFile, targetFile, sourceLang, targetLang)
       setPreview(res)
       if (!title) setTitle(sourceFile.name)
     } catch (e) {
@@ -86,10 +86,13 @@ export default function MemoryUpload({ onCommitted }: { onCommitted: () => void 
       {preview && (
         <div className="alignment-preview">
           <p className="hint">
-            Абзацы сопоставлены автоматически по смыслу ({preview.source_paragraph_count} в оригинале,{' '}
-            {preview.target_paragraph_count} в переводе) — учитываются лишние, пропущенные и объединённые абзацы, а не
-            только их порядковый номер. Если для абзаца не нашлось пары, одно из полей ниже будет пустым (подсвечено) —
-            впишите перевод вручную или удалите строку перед сохранением.
+            Модель разбила документы на смысловые куски и сопоставила их: {preview.pairs.length} пар
+            {preview.gap_count > 0 && (
+              <>
+                , из них <strong>{preview.gap_count}</strong> без пары на одной из сторон (подсвечены ниже)
+              </>
+            )}
+            . Проверьте результат, впишите перевод вручную или удалите лишнее перед сохранением.
           </p>
           <div className="pair-table">
             <div className="pair-row pair-row-header">

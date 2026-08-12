@@ -14,12 +14,17 @@ _BLANK_LINE_SPLIT = re.compile(r"\n\s*\n+")
 # is unreliable for matching them - unlike prose paragraphs, table
 # structure is reliably preserved between an original and its translation.
 # extract_structure_* keeps tables as their own row/cell grid, separate from
-# body paragraphs, precisely so callers can align table cells positionally
-# (app/alignment.align_tables) instead of by similarity. This is a distinct
-# code path from extract_paragraphs_*/iter_docx_paragraphs below, which flatten
-# everything (used by the translate endpoints and the formatted-download
-# rebuild, where a flat, paragraph-object-addressable stream is what's needed)
-# - kept deliberately separate so this doesn't risk changing their behavior.
+# body text, precisely so callers can align table cells positionally
+# (app/alignment.align_tables) instead of by similarity or a model call. The
+# body text itself is returned raw (not pre-split into paragraphs) for
+# app/llm_alignment.py to segment and align in one step - rule-based
+# splitting (blank lines, physical lines) cannot tell flowing prose, a list
+# of short reference entries, and a heading apart, and real technical
+# documents mix all three. This is a distinct code path from
+# extract_paragraphs_*/iter_docx_paragraphs below, which flatten everything
+# into a paragraph list (used by the translate endpoints and the
+# formatted-download rebuild, where that's exactly what's needed) - kept
+# deliberately separate so this doesn't risk changing their behavior.
 
 
 def _split_pdf_pages_into_paragraphs(page_texts: list[str]) -> list[str]:
@@ -109,7 +114,7 @@ def extract_paragraphs(filename: str, data: bytes) -> list[str]:
 Table = list[list[str]]
 
 
-def extract_structure_docx(data: bytes) -> tuple[list[str], list[Table]]:
+def extract_structure_docx(data: bytes) -> tuple[str, list[Table]]:
     try:
         document = Document(io.BytesIO(data))
     except Exception as exc:
@@ -122,7 +127,7 @@ def extract_structure_docx(data: bytes) -> tuple[list[str], list[Table]]:
         rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
         if any(any(cell for cell in row) for row in rows):
             tables.append(rows)
-    return paragraphs, tables
+    return "\n\n".join(paragraphs), tables
 
 
 def _bbox_contains(bbox: tuple[float, float, float, float], obj: dict) -> bool:
@@ -130,7 +135,7 @@ def _bbox_contains(bbox: tuple[float, float, float, float], obj: dict) -> bool:
     return x0 <= obj["x0"] and obj["x1"] <= x1 and top <= obj["top"] and obj["bottom"] <= bottom
 
 
-def extract_structure_pdf(data: bytes) -> tuple[list[str], list[Table]]:
+def extract_structure_pdf(data: bytes) -> tuple[str, list[Table]]:
     try:
         page_texts: list[str] = []
         tables: list[Table] = []
@@ -148,7 +153,9 @@ def extract_structure_pdf(data: bytes) -> tuple[list[str], list[Table]]:
                     text_page = page.filter(lambda obj, bboxes=bboxes: not any(_bbox_contains(b, obj) for b in bboxes))
                 else:
                     text_page = page
-                page_texts.append(text_page.extract_text(x_tolerance=settings.pdf_text_x_tolerance) or "")
+                page_text = (text_page.extract_text(x_tolerance=settings.pdf_text_x_tolerance) or "").strip()
+                if page_text:
+                    page_texts.append(page_text)
     except ValueError:
         raise
     except Exception as exc:
@@ -157,15 +164,15 @@ def extract_structure_pdf(data: bytes) -> tuple[list[str], list[Table]]:
             "Попробуйте пересохранить его (например, через печать в PDF в браузере или "
             "'Сохранить как' в Adobe/Word) или загрузите .docx, если он есть."
         ) from exc
-    return _split_pdf_pages_into_paragraphs(page_texts), tables
+    return "\n\n".join(page_texts), tables
 
 
-def extract_structure(filename: str, data: bytes) -> tuple[list[str], list[Table]]:
+def extract_structure(filename: str, data: bytes) -> tuple[str, list[Table]]:
     lower = filename.lower()
     if lower.endswith(".docx"):
         return extract_structure_docx(data)
     if lower.endswith(".pdf"):
         return extract_structure_pdf(data)
     if lower.endswith(".txt"):
-        return extract_paragraphs_txt(data), []
+        return data.decode("utf-8", errors="replace"), []
     raise ValueError(f"Неподдерживаемый тип файла: {filename}. Используйте .docx, .pdf или .txt")
