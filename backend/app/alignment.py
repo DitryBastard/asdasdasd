@@ -108,3 +108,38 @@ def align_paragraphs(
         i, j = i - di, j - dj
     pairs.reverse()
     return pairs
+
+
+def _positional_pairs(source_items: list[str], target_items: list[str]) -> list[dict]:
+    pairs = []
+    for i in range(max(len(source_items), len(target_items))):
+        source_item = source_items[i] if i < len(source_items) else ""
+        target_item = target_items[i] if i < len(target_items) else ""
+        if source_item.strip() or target_item.strip():
+            pairs.append({"source_text": source_item, "target_text": target_item})
+    return pairs
+
+
+def align_tables(source_tables: list[list[list[str]]], target_tables: list[list[list[str]]]) -> list[dict]:
+    """Match table cells by position (table i, row j, cell k on both sides)
+    instead of by embedding similarity.
+
+    A bare cell value - an element symbol, a lone number - carries almost no
+    distinguishing semantic signal for similarity search to work with, so
+    align_paragraphs' approach is the wrong tool here. A table's row/column
+    structure, on the other hand, is reliably preserved between an original
+    and its translation: translators don't reorder or drop rows of a data
+    table the way a paragraph of prose might get split, merged, or dropped.
+    A table, row, or cell that has no counterpart (a genuine count/shape
+    mismatch) still comes back with the other side left empty, the same
+    "flag it for review" convention align_paragraphs uses for gaps.
+    """
+    pairs: list[dict] = []
+    for t in range(max(len(source_tables), len(target_tables))):
+        source_table = source_tables[t] if t < len(source_tables) else []
+        target_table = target_tables[t] if t < len(target_tables) else []
+        for r in range(max(len(source_table), len(target_table))):
+            source_row = source_table[r] if r < len(source_table) else []
+            target_row = target_table[r] if r < len(target_table) else []
+            pairs.extend(_positional_pairs(source_row, target_row))
+    return pairs

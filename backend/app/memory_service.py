@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
-from .alignment import align_paragraphs
+from .alignment import align_paragraphs, align_tables
 from .config import settings
+from .document_parser import Table
 from .ollama_client import OllamaClient
 from .segmentation import split_sentences
 from .vector_store import vector_store
@@ -9,12 +10,24 @@ from .vector_store import vector_store
 ollama = OllamaClient()
 
 
-async def preview_document_pair(source_paragraphs: list[str], target_paragraphs: list[str]) -> dict:
-    """Align source and translated paragraphs by embedding similarity (see
-    app/alignment.py) rather than assuming paragraph N matches paragraph N -
+async def preview_document_pair(
+    source_paragraphs: list[str],
+    source_tables: list[Table],
+    target_paragraphs: list[str],
+    target_tables: list[Table],
+) -> dict:
+    """Align a source document with its translation before anything is
+    committed to the translation memory.
+
+    Body paragraphs are aligned by embedding similarity (app/alignment.
+    align_paragraphs) rather than assuming paragraph N matches paragraph N -
     that positional assumption breaks as soon as one paragraph is added,
-    dropped, or split/merged during translation. The caller still reviews
-    and can edit the pairs before they are committed.
+    dropped, or split/merged during translation. Table cells are matched
+    positionally instead (app/alignment.align_tables): a bare cell value
+    (an element symbol, a lone number) has too little semantic content for
+    similarity search to place reliably, whereas a table's row/column
+    structure reliably survives translation. The caller still reviews and
+    can edit every pair before it is committed.
     """
     source_embeddings = await ollama.embed(source_paragraphs)
     target_embeddings = await ollama.embed(target_paragraphs)
@@ -26,10 +39,11 @@ async def preview_document_pair(source_paragraphs: list[str], target_paragraphs:
         gap_penalty=settings.alignment_gap_penalty,
         merge_penalty=settings.alignment_merge_penalty,
     )
+    pairs.extend(align_tables(source_tables, target_tables))
     return {
         "pairs": pairs,
-        "source_paragraph_count": len(source_paragraphs),
-        "target_paragraph_count": len(target_paragraphs),
+        "source_paragraph_count": len(source_paragraphs) + sum(len(t) for t in source_tables),
+        "target_paragraph_count": len(target_paragraphs) + sum(len(t) for t in target_tables),
     }
 
 

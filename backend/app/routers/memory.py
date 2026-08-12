@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from .. import memory_service
-from ..document_parser import extract_paragraphs
+from ..document_parser import extract_structure
 from ..schemas import (
     CommitDocumentPairsRequest,
     DocumentPairPreviewResponse,
@@ -47,13 +47,15 @@ async def preview_document_pair(
     source_data = await source_file.read()
     target_data = await target_file.read()
     try:
-        source_paragraphs = extract_paragraphs(source_file.filename or "source.txt", source_data)
-        target_paragraphs = extract_paragraphs(target_file.filename or "target.txt", target_data)
+        source_paragraphs, source_tables = extract_structure(source_file.filename or "source.txt", source_data)
+        target_paragraphs, target_tables = extract_structure(target_file.filename or "target.txt", target_data)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if not source_paragraphs or not target_paragraphs:
-        raise HTTPException(400, "Could not extract text from one of the documents")
-    return await memory_service.preview_document_pair(source_paragraphs, target_paragraphs)
+    if not source_paragraphs and not source_tables:
+        raise HTTPException(400, "Could not extract text from the source document")
+    if not target_paragraphs and not target_tables:
+        raise HTTPException(400, "Could not extract text from the target document")
+    return await memory_service.preview_document_pair(source_paragraphs, source_tables, target_paragraphs, target_tables)
 
 
 @router.post("/documents/commit")

@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
+reportlab>=4.2.5  # only used to generate a test-fixture PDF with a real table

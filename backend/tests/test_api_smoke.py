@@ -145,6 +145,57 @@ def test_document_pair_preview_and_commit(monkeypatch):
         assert commit_response.json()["added_segments"] >= 2
 
 
+def _docx_bytes(*, paragraph: str, table_rows: list[list[str]]) -> bytes:
+    document = Document()
+    document.add_paragraph(paragraph)
+    table = document.add_table(rows=len(table_rows), cols=len(table_rows[0]))
+    for r, row in enumerate(table_rows):
+        for c, value in enumerate(row):
+            table.cell(r, c).text = value
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def test_document_pair_preview_matches_table_cells_positionally_not_semantically(monkeypatch):
+    # This is the real-world case that motivated app/alignment.align_tables:
+    # bare cell values (element symbols, numbers) carry too little semantic
+    # signal for embedding similarity, but table structure is preserved
+    # between original and translation - so this must come out matched
+    # correctly even though every cell maps to the *same* fallback vector
+    # under fake_embed (nothing here is in _KNOWN_SENTENCES).
+    monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+
+    source_bytes = _docx_bytes(
+        paragraph="Заголовок документа.",
+        table_rows=[["Fe", "Ti", "Mo"], ["178,29", "0,5", "I"]],
+    )
+    target_bytes = _docx_bytes(
+        paragraph="Описание раздела.",
+        table_rows=[["Fe", "Ti", "Mo"], ["178.29", "0.5", "I"]],
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/memory/documents/preview",
+            files={
+                "source_file": ("source.docx", source_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                "target_file": ("target.docx", target_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            },
+        )
+
+    assert response.status_code == 200
+    pairs = response.json()["pairs"]
+    table_pairs = [p for p in pairs if p["source_text"] in {"Fe", "Ti", "Mo", "178,29", "0,5", "I"}]
+    assert {"source_text": "Fe", "target_text": "Fe"} in table_pairs
+    assert {"source_text": "Ti", "target_text": "Ti"} in table_pairs
+    assert {"source_text": "Mo", "target_text": "Mo"} in table_pairs
+    assert {"source_text": "178,29", "target_text": "178.29"} in table_pairs
+    assert {"source_text": "0,5", "target_text": "0.5"} in table_pairs
+    assert {"source_text": "I", "target_text": "I"} in table_pairs
+    assert len(table_pairs) == 6
+
+
 def test_health_endpoint_when_models_present(monkeypatch):
     monkeypatch.setattr(OllamaClient, "list_models", fake_list_models_all_present)
 
