@@ -53,7 +53,7 @@ async def preview_document_pair(
         raise HTTPException(400, str(exc)) from exc
     if not source_paragraphs or not target_paragraphs:
         raise HTTPException(400, "Could not extract text from one of the documents")
-    return memory_service.preview_document_pair(source_paragraphs, target_paragraphs)
+    return await memory_service.preview_document_pair(source_paragraphs, target_paragraphs)
 
 
 @router.post("/documents/commit")

@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from .alignment import align_paragraphs
+from .config import settings
 from .ollama_client import OllamaClient
 from .segmentation import split_sentences
 from .vector_store import vector_store
@@ -7,17 +9,23 @@ from .vector_store import vector_store
 ollama = OllamaClient()
 
 
-def preview_document_pair(source_paragraphs: list[str], target_paragraphs: list[str]) -> dict:
-    """Naive positional alignment: pair up paragraph N of the source document
-    with paragraph N of the translated document. This assumes the translated
-    document keeps the same paragraph structure as the original, which holds
-    for most bilingual technical documentation but is not guaranteed - the
-    caller reviews and edits the pairs before they are committed.
+async def preview_document_pair(source_paragraphs: list[str], target_paragraphs: list[str]) -> dict:
+    """Align source and translated paragraphs by embedding similarity (see
+    app/alignment.py) rather than assuming paragraph N matches paragraph N -
+    that positional assumption breaks as soon as one paragraph is added,
+    dropped, or split/merged during translation. The caller still reviews
+    and can edit the pairs before they are committed.
     """
-    pair_count = min(len(source_paragraphs), len(target_paragraphs))
-    pairs = [
-        {"source_text": source_paragraphs[i], "target_text": target_paragraphs[i]} for i in range(pair_count)
-    ]
+    source_embeddings = await ollama.embed(source_paragraphs)
+    target_embeddings = await ollama.embed(target_paragraphs)
+    pairs = align_paragraphs(
+        source_paragraphs,
+        source_embeddings,
+        target_paragraphs,
+        target_embeddings,
+        gap_penalty=settings.alignment_gap_penalty,
+        merge_penalty=settings.alignment_merge_penalty,
+    )
     return {
         "pairs": pairs,
         "source_paragraph_count": len(source_paragraphs),

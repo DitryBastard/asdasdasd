@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     # How many sentences are sent to the model in a single translation request.
     batch_size: int = 20
 
+    # Paragraph-alignment costs (see app/alignment.py). Higher gap_penalty
+    # makes the aligner more reluctant to leave a paragraph unmatched;
+    # higher merge_penalty makes it more reluctant to merge two paragraphs
+    # on one side into one on the other. These are reasonable starting
+    # points, not empirically tuned against real bge-m3 output - adjust if
+    # real documents show the aligner being too eager/reluctant to skip.
+    alignment_gap_penalty: float = 0.15
+    alignment_merge_penalty: float = 0.03
+
     cors_origins: str = "http://localhost:5173"
 
     @property

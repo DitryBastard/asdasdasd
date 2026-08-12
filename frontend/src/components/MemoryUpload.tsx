@@ -86,8 +86,10 @@ export default function MemoryUpload({ onCommitted }: { onCommitted: () => void 
       {preview && (
         <div className="alignment-preview">
           <p className="hint">
-            Абзацы сопоставлены по порядку ({preview.source_paragraph_count} в оригинале, {preview.target_paragraph_count} в
-            переводе). Проверьте пары и удалите неверные перед сохранением.
+            Абзацы сопоставлены автоматически по смыслу ({preview.source_paragraph_count} в оригинале,{' '}
+            {preview.target_paragraph_count} в переводе) — учитываются лишние, пропущенные и объединённые абзацы, а не
+            только их порядковый номер. Если для абзаца не нашлось пары, одно из полей ниже будет пустым (подсвечено) —
+            впишите перевод вручную или удалите строку перед сохранением.
           </p>
           <div className="pair-table">
             <div className="pair-row pair-row-header">
@@ -95,23 +97,28 @@ export default function MemoryUpload({ onCommitted }: { onCommitted: () => void 
               <span>Перевод</span>
               <span />
             </div>
-            {preview.pairs.map((pair, idx) => (
-              <div className="pair-row" key={idx}>
-                <textarea
-                  className="pair-cell"
-                  value={pair.source_text}
-                  onChange={(e) => updatePair(idx, 'source_text', e.target.value)}
-                />
-                <textarea
-                  className="pair-cell"
-                  value={pair.target_text}
-                  onChange={(e) => updatePair(idx, 'target_text', e.target.value)}
-                />
-                <button className="icon-btn" onClick={() => removePair(idx)} title="Удалить пару" aria-label="Удалить пару">
-                  ✕
-                </button>
-              </div>
-            ))}
+            {preview.pairs.map((pair, idx) => {
+              const isGap = !pair.source_text.trim() || !pair.target_text.trim()
+              return (
+                <div className={`pair-row ${isGap ? 'pair-row-gap' : ''}`.trim()} key={idx}>
+                  <textarea
+                    className="pair-cell"
+                    value={pair.source_text}
+                    placeholder={pair.source_text ? undefined : 'Нет пары в оригинале — впишите вручную или удалите строку'}
+                    onChange={(e) => updatePair(idx, 'source_text', e.target.value)}
+                  />
+                  <textarea
+                    className="pair-cell"
+                    value={pair.target_text}
+                    placeholder={pair.target_text ? undefined : 'Нет пары в переводе — впишите вручную или удалите строку'}
+                    onChange={(e) => updatePair(idx, 'target_text', e.target.value)}
+                  />
+                  <button className="icon-btn" onClick={() => removePair(idx)} title="Удалить пару" aria-label="Удалить пару">
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
           </div>
           <button className="primary-btn" onClick={commit} disabled={loading || preview.pairs.length === 0}>
             {loading ? 'Сохраняю…' : `Добавить ${preview.pairs.length} пар в базу`}

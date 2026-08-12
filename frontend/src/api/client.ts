@@ -41,6 +41,39 @@ export function translateDocument(file: File, sourceLang: string, targetLang: st
   return request('/api/translate/document', { method: 'POST', body: form })
 }
 
+function parseFilename(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) return fallback
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match) return decodeURIComponent(utf8Match[1])
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  return plainMatch ? plainMatch[1] : fallback
+}
+
+export async function downloadTranslatedDocument(
+  file: File,
+  sourceLang: string,
+  targetLang: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('source_lang', sourceLang)
+  form.append('target_lang', targetLang)
+  const res = await fetch('/api/translate/document/formatted', { method: 'POST', body: form })
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      detail = body.detail ?? detail
+    } catch {
+      // response had no JSON body; fall back to statusText
+    }
+    throw new Error(detail)
+  }
+  const blob = await res.blob()
+  const filename = parseFilename(res.headers.get('Content-Disposition'), 'translated.docx')
+  return { blob, filename }
+}
+
 export function listMemory(params: {
   sourceLang?: string
   targetLang?: string

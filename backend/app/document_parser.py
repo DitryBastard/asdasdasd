@@ -7,10 +7,27 @@ from pypdf import PdfReader
 _BLANK_LINE_SPLIT = re.compile(r"\n\s*\n+")
 
 
+def iter_docx_paragraphs(document) -> list:
+    """Every paragraph in a docx: body text, then table cells.
+
+    Not strict reading order when tables are interleaved with body text, but
+    every paragraph is visited exactly once - which is all extraction
+    (translate) and reconstruction (formatted download, see docx_builder.py)
+    need, as long as both use this same shared traversal so their paragraph
+    sets line up. Nested tables (a table inside a cell) are not walked.
+    """
+    paragraphs = list(document.paragraphs)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                paragraphs.extend(cell.paragraphs)
+    return paragraphs
+
+
 def extract_paragraphs_docx(data: bytes) -> list[str]:
     try:
         document = Document(io.BytesIO(data))
-        return [p.text.strip() for p in document.paragraphs if p.text.strip()]
+        return [p.text.strip() for p in iter_docx_paragraphs(document) if p.text.strip()]
     except Exception as exc:
         # python-docx can fail in many file-specific ways on a malformed or
         # non-Word file (bad zip, missing parts, ...) - surface one clear,

@@ -7,8 +7,10 @@ is what actually exercises the route <-> schema <-> service wiring, which
 the pure-function unit tests elsewhere don't touch.
 """
 
+import io
 import re
 
+from docx import Document
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -29,7 +31,11 @@ _KNOWN_SENTENCES = [
     "Это новое предложение без совпадений.",
     "Первый абзац.",
     "Второй абзац.",
+    "First paragraph.",
+    "Second paragraph.",
     "Совсем новое предложение без совпадений в базе.",
+    "Заголовок документа.",
+    "Описание раздела.",
 ]
 
 
@@ -118,7 +124,13 @@ def test_document_pair_preview_and_commit(monkeypatch):
         )
         assert preview_response.status_code == 200
         preview = preview_response.json()
-        assert len(preview["pairs"]) == 2
+        # Real assertion on content, not just count: proves the embedding-based
+        # aligner (app/alignment.py) actually paired each source paragraph with
+        # its matching translation rather than just zipping by position.
+        assert preview["pairs"] == [
+            {"source_text": "Первый абзац.", "target_text": "First paragraph."},
+            {"source_text": "Второй абзац.", "target_text": "Second paragraph."},
+        ]
 
         commit_response = client.post(
             "/api/memory/documents/commit",
@@ -183,3 +195,50 @@ def test_translate_returns_503_with_actionable_message_when_model_missing(monkey
         )
         assert response.status_code == 503
         assert "ollama pull" in response.json()["detail"]
+
+
+def test_translate_document_formatted_returns_docx_with_translated_text(monkeypatch):
+    monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+    monkeypatch.setattr(OllamaClient, "chat", fake_chat)
+
+    document = Document()
+    document.add_paragraph("Заголовок документа.")
+    document.add_paragraph("Описание раздела.")
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/translate/document/formatted",
+            files={
+                "file": (
+                    "исходник.docx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+            data={"source_lang": "ru", "target_lang": "en"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
+
+    rebuilt = Document(io.BytesIO(response.content))
+    texts = [p.text for p in rebuilt.paragraphs if p.text.strip()]
+    assert texts == ["[translated 1]", "[translated 2]"]
+
+
+def test_translate_document_formatted_rejects_non_docx(monkeypatch):
+    monkeypatch.setattr(OllamaClient, "embed", fake_embed)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/translate/document/formatted",
+            files={"file": ("notes.txt", b"Some text.", "text/plain")},
+            data={"source_lang": "ru", "target_lang": "en"},
+        )
+
+    assert response.status_code == 400
