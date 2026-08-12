@@ -5,6 +5,8 @@ import pdfplumber
 from docx import Document
 from pypdf import PdfReader
 
+from .config import settings
+
 _BLANK_LINE_SPLIT = re.compile(r"\n\s*\n+")
 
 # A table cell (a bare element symbol, a lone number) carries almost no
@@ -18,6 +20,27 @@ _BLANK_LINE_SPLIT = re.compile(r"\n\s*\n+")
 # everything (used by the translate endpoints and the formatted-download
 # rebuild, where a flat, paragraph-object-addressable stream is what's needed)
 # - kept deliberately separate so this doesn't risk changing their behavior.
+
+
+def _split_pdf_pages_into_paragraphs(page_texts: list[str]) -> list[str]:
+    """Blank lines mark paragraph breaks when a PDF's extracted text has
+    them. When a page has none - common in densely-set technical text with
+    no blank-line spacing between paragraphs - falling back to one
+    paragraph per physical line would shred a single wrapped paragraph into
+    one fragment per line break, which is far worse for both readability
+    and downstream matching/alignment quality than the coarser alternative
+    of treating the whole page as one paragraph. Shared between the pypdf
+    and pdfplumber extraction paths below so both get the same fallback.
+    """
+    paragraphs: list[str] = []
+    for page_text in page_texts:
+        if not page_text.strip():
+            continue
+        page_paragraphs = [p.strip() for p in _BLANK_LINE_SPLIT.split(page_text) if p.strip()]
+        if len(page_paragraphs) <= 1:
+            page_paragraphs = [" ".join(line.strip() for line in page_text.split("\n") if line.strip())]
+        paragraphs.extend(page_paragraphs)
+    return paragraphs
 
 
 def iter_docx_paragraphs(document) -> list:
@@ -53,7 +76,7 @@ def extract_paragraphs_docx(data: bytes) -> list[str]:
 def extract_paragraphs_pdf(data: bytes) -> list[str]:
     try:
         reader = PdfReader(io.BytesIO(data), strict=False)
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        page_texts = [page.extract_text() or "" for page in reader.pages]
     except Exception as exc:
         # Real-world PDFs (scans, exports from various document systems)
         # frequently have non-standard trailers/streams that make pypdf give
@@ -64,12 +87,7 @@ def extract_paragraphs_pdf(data: bytes) -> list[str]:
             "Попробуйте пересохранить его (например, через печать в PDF в браузере или "
             "'Сохранить как' в Adobe/Word) или загрузите .docx, если он есть."
         ) from exc
-    paragraphs = [p.strip() for p in _BLANK_LINE_SPLIT.split(text) if p.strip()]
-    if len(paragraphs) <= 1:
-        # Some PDFs don't have blank-line paragraph breaks in their extracted
-        # text; fall back to one paragraph per non-empty line.
-        paragraphs = [line.strip() for line in text.split("\n") if line.strip()]
-    return paragraphs
+    return _split_pdf_pages_into_paragraphs(page_texts)
 
 
 def extract_paragraphs_txt(data: bytes) -> list[str]:
@@ -114,7 +132,7 @@ def _bbox_contains(bbox: tuple[float, float, float, float], obj: dict) -> bool:
 
 def extract_structure_pdf(data: bytes) -> tuple[list[str], list[Table]]:
     try:
-        paragraphs: list[str] = []
+        page_texts: list[str] = []
         tables: list[Table] = []
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             for page in pdf.pages:
@@ -130,7 +148,7 @@ def extract_structure_pdf(data: bytes) -> tuple[list[str], list[Table]]:
                     text_page = page.filter(lambda obj, bboxes=bboxes: not any(_bbox_contains(b, obj) for b in bboxes))
                 else:
                     text_page = page
-                paragraphs.extend(_split_pdf_page_text(text_page.extract_text() or ""))
+                page_texts.append(text_page.extract_text(x_tolerance=settings.pdf_text_x_tolerance) or "")
     except ValueError:
         raise
     except Exception as exc:
@@ -139,14 +157,7 @@ def extract_structure_pdf(data: bytes) -> tuple[list[str], list[Table]]:
             "Попробуйте пересохранить его (например, через печать в PDF в браузере или "
             "'Сохранить как' в Adobe/Word) или загрузите .docx, если он есть."
         ) from exc
-    return paragraphs, tables
-
-
-def _split_pdf_page_text(text: str) -> list[str]:
-    paragraphs = [p.strip() for p in _BLANK_LINE_SPLIT.split(text) if p.strip()]
-    if len(paragraphs) <= 1:
-        paragraphs = [line.strip() for line in text.split("\n") if line.strip()]
-    return paragraphs
+    return _split_pdf_pages_into_paragraphs(page_texts), tables
 
 
 def extract_structure(filename: str, data: bytes) -> tuple[list[str], list[Table]]:

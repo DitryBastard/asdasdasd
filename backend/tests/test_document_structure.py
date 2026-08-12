@@ -4,7 +4,7 @@ import pytest
 from docx import Document
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.document_parser import extract_structure, extract_structure_docx, extract_structure_pdf
 
@@ -25,6 +25,12 @@ def _build_sample_docx() -> bytes:
 
 
 def _build_sample_pdf() -> bytes:
+    # Intro and closing text live on separate pages (rather than the same
+    # page with just a Spacer between them) because pdfplumber's basic text
+    # extraction doesn't reliably turn a visual gap into a blank line in the
+    # extracted text - relying on that would make this test flaky. Page
+    # boundaries, by contrast, always keep text apart: each page is
+    # extracted and paragraph-split independently.
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
@@ -32,7 +38,7 @@ def _build_sample_pdf() -> bytes:
     table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black)]))
     elements = [
         Paragraph("Intro paragraph about the material.", styles["Normal"]),
-        Spacer(1, 12),
+        PageBreak(),
         table,
         Spacer(1, 12),
         Paragraph("Closing paragraph after the table.", styles["Normal"]),

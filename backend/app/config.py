@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     alignment_gap_penalty: float = 0.15
     alignment_merge_penalty: float = 0.03
 
+    # Max horizontal gap (PDF points) between two characters before
+    # pdfplumber treats them as separate words when extracting PDF text.
+    # Lower catches tighter word gaps (fixes words getting glued together,
+    # e.g. "wasdevelopedin") at the risk of splitting some legitimately
+    # tight character pairs into extra spaces; this depends on the specific
+    # PDF's font/kerning, so there is no one correct value - pdfplumber's
+    # own default is 3.0, lowered here as a starting point since glued
+    # words are a worse failure mode for both readability and matching
+    # quality than an occasional stray space.
+    pdf_text_x_tolerance: float = 1.5
+
     cors_origins: str = "http://localhost:5173"
 
     @property
